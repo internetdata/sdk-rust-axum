@@ -2,6 +2,12 @@
 
 What each release changed for you, newest first. Each line is a commit's summary, linked to its full description and diff.
 
+## 1.0.1 - 2026-11-14
+
+### Fixes
+
+- Require internetdata 2.10.1: a 403 can mean the key lacks the ip.lookup scope ([`3cd8d6c`](https://github.com/internetdata/sdk-rust-axum/commit/3cd8d6ca7b85c8215f58f8671134e3b1db6cc48f))
+
 ## 1.0.0 - 2026-11-14
 
 ### Features
