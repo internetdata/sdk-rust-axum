@@ -1,0 +1,465 @@
+// The adapter through a real axum router, plus the shared conformance corpus
+// asserted end to end rather than against the core directly.
+//
+// What is NOT here is the condition matrix, fail-open and the selectors: those
+// are framework-independent and are asserted once for Rust, in the base SDK's
+// tests/middleware.rs. Repeating them per adapter is how two adapters end up
+// disagreeing about which copy is right.
+
+use std::net::SocketAddr;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
+
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+use axum::Router;
+use axum::body::Body;
+use axum::extract::{ConnectInfo, State};
+use axum::response::IntoResponse;
+use axum::routing::get;
+use http::{Request, StatusCode};
+use internetdata::middleware::{Condition, Options, from_json, header, xff};
+use internetdata_axum::{Found, InternetData, MaybeFound};
+use serde_json::{Value, json};
+use tower::ServiceExt;
+
+const PUBLIC_IP: &str = "45.83.91.1";
+
+/// A stub API, served by axum on a random port, that answers every lookup from
+/// one body and records what it was asked about - so "never touched the
+/// network" is asserted rather than assumed.
+struct Api {
+    base_url: String,
+    asked: Arc<Mutex<Vec<String>>>,
+    authorizations: Arc<Mutex<Vec<Option<String>>>>,
+}
+
+impl Api {
+    /// Answers as given, for a body that is already a whole answer.
+    async fn serving(body: Value, status: StatusCode) -> Self {
+        let asked = Arc::new(Mutex::new(Vec::new()));
+        let authorizations = Arc::new(Mutex::new(Vec::new()));
+        let app = Router::new().route("/{ip}", get(answer)).with_state(Canned {
+            body,
+            status,
+            asked: Arc::clone(&asked),
+            authorizations: Arc::clone(&authorizations),
+        });
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        let addr = listener.local_addr().expect("addr");
+        tokio::spawn(async move { axum::serve(listener, app).await.expect("serve") });
+        Self { base_url: format!("http://{addr}"), asked, authorizations }
+    }
+
+    /// A served answer carries every member the spec requires, so a test's own
+    /// members go over Unlimited's answer rather than standing alone.
+    async fn ok(members: Value) -> Self {
+        let mut body = unlimited();
+        for (name, value) in members.as_object().expect("an object") {
+            body[name] = value.clone();
+        }
+        Self::serving(body, StatusCode::OK).await
+    }
+
+    fn asked(&self) -> Vec<String> {
+        self.asked.lock().unwrap().clone()
+    }
+
+    fn authorizations(&self) -> Vec<Option<String>> {
+        self.authorizations.lock().unwrap().clone()
+    }
+
+    fn options(&self) -> Options {
+        Options::new().base_url(&self.base_url)
+    }
+}
+
+/// The corpus's Unlimited answer, Unlimited's members with nothing flagged.
+fn unlimited() -> Value {
+    corpus()["lookup"]
+        .as_array()
+        .expect("lookup cases")
+        .iter()
+        .find(|case| case["name"] == "unlimited-answer")
+        .expect("the corpus has an unlimited-answer lookup case")["body"]
+        .clone()
+}
+
+fn corpus() -> Value {
+    serde_json::from_str(include_str!("../testdata/testdata.json")).expect("the corpus")
+}
+
+#[derive(Clone)]
+struct Canned {
+    body: Value,
+    status: StatusCode,
+    asked: Arc<Mutex<Vec<String>>>,
+    authorizations: Arc<Mutex<Vec<Option<String>>>>,
+}
+
+async fn answer(
+    State(canned): State<Canned>,
+    axum::extract::Path(ip): axum::extract::Path<String>,
+    headers: http::HeaderMap,
+) -> impl IntoResponse {
+    canned.asked.lock().unwrap().push(ip.clone());
+    let authorization = headers.get(http::header::AUTHORIZATION);
+    canned
+        .authorizations
+        .lock()
+        .unwrap()
+        .push(authorization.and_then(|v| v.to_str().ok()).map(str::to_owned));
+    let mut body = canned.body.clone();
+    if let Some(object) = body.as_object_mut() {
+        object.insert("ip".into(), json!(ip));
+    }
+    (canned.status, axum::Json(body))
+}
+
+/// An app whose one handler reports back what the middleware attached.
+fn app(guard: InternetData) -> Router {
+    Router::new()
+        .route(
+            "/{*rest}",
+            get(|found: MaybeFound| async move {
+                let MaybeFound(found) = found;
+                axum::Json(json!({
+                    "attached": found.is_some(),
+                    "ip": found.as_ref().and_then(|f| f.ip.clone()),
+                    "country": found.as_ref().and_then(|f| f.result.as_ref())
+                        .map(|r| r.location.country.clone()),
+                    "is_vpn": found.as_ref().and_then(|f| f.result.as_ref()).and_then(|r| r.is_vpn),
+                    "is_bogon": found.as_ref().and_then(|f| f.result.as_ref()).map(|r| r.is_bogon),
+                    "error": found.as_ref().and_then(|f| f.error.as_ref()).map(|e| e.to_string()),
+                }))
+            }),
+        )
+        .layer(guard)
+}
+
+/// One request through the whole stack. `peer` is what
+/// `into_make_service_with_connect_info` would have put there.
+async fn call(
+    app: Router,
+    path: &str,
+    peer: Option<&str>,
+    headers: &[(&str, &str)],
+) -> (StatusCode, Value) {
+    let mut request = Request::builder().uri(path);
+    for (name, value) in headers {
+        request = request.header(*name, *value);
+    }
+    let mut request = request.body(Body::empty()).expect("request");
+    if let Some(peer) = peer {
+        let addr: SocketAddr = format!("{peer}:54321").parse().expect("peer");
+        request.extensions_mut().insert(ConnectInfo(addr));
+    }
+    let answer = app.oneshot(request).await.expect("call");
+    let status = answer.status();
+    let bytes = axum::body::to_bytes(answer.into_body(), 64 * 1024).await.expect("body");
+    (status, serde_json::from_slice(&bytes).unwrap_or(Value::Null))
+}
+
+fn guard(options: Options) -> InternetData {
+    InternetData::new(options).expect("build")
+}
+
+#[tokio::test]
+async fn enriches_the_request_and_leaves_the_decision_to_the_handler() {
+    let api = Api::ok(json!({ "is_vpn": true })).await;
+    let app = app(guard(api.options()));
+
+    let (status, body) = call(app, "/anything", Some(PUBLIC_IP), &[]).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["attached"], json!(true));
+    assert_eq!(body["country"], json!("AT"));
+    assert_eq!(body["is_vpn"], json!(true));
+    assert_eq!(body["ip"], json!(PUBLIC_IP));
+    assert_eq!(api.asked(), vec![PUBLIC_IP]);
+}
+
+/// The README's first condition.
+fn countries() -> Vec<Condition> {
+    vec![Condition::from([("location", Condition::from([("country", vec!["CU", "IR", "KP"])]))])]
+}
+
+fn located(country: &str) -> Value {
+    let mut location = unlimited()["location"].clone();
+    location["country"] = json!(country);
+    json!({ "location": location })
+}
+
+#[tokio::test]
+async fn blocks_before_the_handler_runs() {
+    let api = Api::ok(located("IR")).await;
+    let blocking = app(guard(api.options().block_condition(countries())));
+
+    let (status, body) = call(blocking, "/anything", Some(PUBLIC_IP), &[]).await;
+
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body, json!({ "error": "access denied" }));
+    assert!(body.get("attached").is_none(), "the handler answered a blocked request");
+
+    let elsewhere = Api::ok(located("AT")).await;
+    let passing = app(guard(elsewhere.options().block_condition(countries())));
+    let (status, body) = call(passing, "/anything", Some(PUBLIC_IP), &[]).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["country"], json!("AT"));
+}
+
+#[tokio::test]
+async fn on_blocked_replaces_the_refusal() {
+    let api = Api::ok(located("IR")).await;
+    let app = app(guard(api.options().block_condition(countries())).on_blocked(|_parts, found| {
+        let country = found.result.as_ref().map(|r| r.location.country.clone()).unwrap_or_default();
+        (StatusCode::UNAVAILABLE_FOR_LEGAL_REASONS, country).into_response()
+    }));
+
+    let answer = app
+        .oneshot({
+            let mut request = Request::builder().uri("/x").body(Body::empty()).expect("request");
+            request.extensions_mut().insert(ConnectInfo(SocketAddr::from(([45, 83, 91, 1], 1))));
+            request
+        })
+        .await
+        .expect("call");
+
+    assert_eq!(answer.status().as_u16(), 451);
+    let bytes = axum::body::to_bytes(answer.into_body(), 1024).await.expect("body");
+    assert_eq!(&bytes[..], b"IR");
+}
+
+#[tokio::test]
+async fn skip_leaves_the_request_untouched() {
+    let api = Api::ok(json!({ "is_vpn": true })).await;
+    let app = app(guard(api.options().block_condition(vec![Condition::from([("is_vpn", true)])]))
+        .skip(|parts| parts.uri.path().starts_with("/healthz")));
+
+    let (status, body) = call(app, "/healthz/live", Some(PUBLIC_IP), &[]).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["attached"], json!(false));
+    assert!(api.asked().is_empty());
+}
+
+#[tokio::test]
+async fn a_failing_lookup_lets_the_visitor_through() {
+    let api = Api::serving(json!({ "error": "boom" }), StatusCode::INTERNAL_SERVER_ERROR).await;
+    let app = app(guard(
+        api.options().retries(0).block_condition(vec![Condition::from([("is_vpn", true)])]),
+    ));
+
+    let (status, body) = call(app, "/x", Some(PUBLIC_IP), &[]).await;
+
+    assert_eq!(status, StatusCode::OK, "our outage must not become theirs");
+    assert!(body["error"].as_str().expect("an error").contains("server_error"));
+}
+
+// The test that matters. Every other assertion here would pass whether or not
+// the selector is right, because a direct connection has nothing to confuse.
+#[tokio::test]
+async fn a_forged_x_forwarded_for_is_ignored_by_default() {
+    let api = Api::ok(json!({ "is_vpn": true })).await;
+    let default = app(guard(api.options()));
+
+    let (_, body) = call(default, "/x", Some("10.0.0.7"), &[("X-Forwarded-For", PUBLIC_IP)]).await;
+
+    assert_eq!(body["ip"], json!("10.0.0.7"), "ConnectInfo is the socket peer, not the header");
+    assert_eq!(body["is_bogon"], json!(true));
+    assert!(api.asked().is_empty(), "and a bogon is answered locally, so nothing was asked");
+
+    let trusting = Api::ok(json!({ "is_vpn": true })).await;
+    let explicit = app(guard(trusting.options().ip_selector(xff(0))));
+    let (_, body) = call(explicit, "/x", Some("10.0.0.7"), &[("X-Forwarded-For", PUBLIC_IP)]).await;
+    assert_eq!(body["ip"], json!(PUBLIC_IP));
+    assert_eq!(trusting.asked(), vec![PUBLIC_IP]);
+}
+
+#[tokio::test]
+async fn a_header_selector_reads_the_edge_that_writes_it() {
+    let api = Api::ok(json!({ "is_vpn": true })).await;
+    let app = app(guard(api.options().ip_selector(header("CF-Connecting-IP"))));
+
+    call(app, "/x", Some("10.0.0.7"), &[("CF-Connecting-IP", "45.83.91.9")]).await;
+
+    assert_eq!(api.asked(), vec!["45.83.91.9"]);
+}
+
+#[tokio::test]
+async fn depth_counts_trusted_hops_from_the_right() {
+    let api = Api::ok(json!({ "is_vpn": true })).await;
+    let app = app(guard(api.options().ip_selector(xff(1))));
+
+    call(
+        app,
+        "/x",
+        Some("10.0.0.7"),
+        &[("X-Forwarded-For", "45.83.91.1, 70.41.3.18, 150.172.238.178")],
+    )
+    .await;
+
+    assert_eq!(api.asked(), vec!["150.172.238.178"]);
+}
+
+// Serving without into_make_service_with_connect_info leaves no peer at all,
+// which is a wiring mistake the middleware has to survive rather than panic on.
+#[tokio::test]
+async fn no_connect_info_warns_and_lets_the_visitor_through() {
+    let api = Api::ok(json!({ "is_vpn": true })).await;
+    let warned = Arc::new(AtomicUsize::new(0));
+    let counter = Arc::clone(&warned);
+    let app = app(guard(
+        api.options().block_condition(vec![Condition::from([("is_vpn", true)])]).on_warn(Arc::new(
+            move |_| {
+                counter.fetch_add(1, Ordering::SeqCst);
+            },
+        )),
+    ));
+
+    let (status, body) = call(app, "/x", None, &[]).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(body["error"].as_str().expect("an error").contains("no client address"));
+    assert_eq!(warned.load(Ordering::SeqCst), 1);
+    assert!(api.asked().is_empty());
+}
+
+#[tokio::test]
+async fn found_rejects_where_the_layer_is_not_mounted() {
+    let unguarded: Router =
+        Router::new().route("/", get(|Found(_): Found| async { "unreachable" }));
+
+    let (status, _) = call(unguarded, "/", Some(PUBLIC_IP), &[]).await;
+
+    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR, "a wiring mistake, not a visitor's");
+}
+
+/// Built exactly as the README builds it, the key read the way the README reads
+/// it, set and unset, and served through `into_make_service_with_connect_info`
+/// on a real socket. Every other test here hands the layer a stub's base URL.
+/// The visitor is the loopback, a bogon answered locally, so the default API is
+/// never asked.
+#[tokio::test]
+async fn the_readme_build_serves_a_request() {
+    for key in [Some("key"), None] {
+        let options = Options::new().api_key(readme_key(key).unwrap_or_default());
+        let guard = InternetData::new(options).expect("build");
+        let app = Router::new()
+            .route(
+                "/",
+                get(|Found(found): Found| async move {
+                    let result = found.result.as_ref().expect("a result");
+                    format!("bogon={} country={:?}", result.is_bogon, result.location.country)
+                }),
+            )
+            .layer(guard);
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        let addr = listener.local_addr().expect("addr");
+        tokio::spawn(async move {
+            axum::serve(listener, app.into_make_service_with_connect_info::<SocketAddr>())
+                .await
+                .expect("serve");
+        });
+
+        let mut socket = tokio::net::TcpStream::connect(addr).await.expect("connect");
+        socket
+            .write_all(b"GET / HTTP/1.1\r\nHost: app\r\nConnection: close\r\n\r\n")
+            .await
+            .expect("send");
+        let mut answer = String::new();
+        socket.read_to_string(&mut answer).await.expect("read");
+
+        assert!(answer.starts_with("HTTP/1.1 200"), "{answer}");
+        assert!(answer.ends_with("bogon=true country=\"\""), "{answer}");
+    }
+}
+
+/// What the README's `std::env::var("INTERNETDATA_API_KEY")` answers with the
+/// variable set to `key`, or unset; edition 2024 makes setting one `unsafe`.
+fn readme_key(key: Option<&str>) -> Result<String, std::env::VarError> {
+    key.map(str::to_owned).ok_or(std::env::VarError::NotPresent)
+}
+
+/// The README's build again, from a PUBLIC peer with a forged
+/// `X-Forwarded-For`, the lookup answered by a recording stub: a layer that
+/// dropped the key, or read the header by default, would pass the test above,
+/// since a loopback peer is answered with no request.
+#[tokio::test]
+async fn the_readme_key_reaches_the_api_for_a_public_peer() {
+    for (key, sent) in [(Some("key"), Some("Bearer key")), (None, None)] {
+        let api = Api::ok(json!({})).await;
+        let options = Options::new().api_key(readme_key(key).unwrap_or_default());
+        let app = app(guard(options.base_url(&api.base_url)));
+
+        let (status, body) =
+            call(app, "/x", Some(PUBLIC_IP), &[("X-Forwarded-For", "1.1.1.1")]).await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            body["ip"],
+            json!(PUBLIC_IP),
+            "the default is the socket peer, never the header"
+        );
+        assert_eq!(body["country"], json!("AT"));
+        assert_eq!(api.asked(), vec![PUBLIC_IP]);
+        assert_eq!(
+            api.authorizations(),
+            vec![sent.map(str::to_owned)],
+            "the key must reach the API"
+        );
+    }
+}
+
+#[tokio::test]
+async fn corpus_conditions() {
+    let corpus = corpus();
+    for case in corpus["middleware"]["conditions"].as_array().expect("conditions") {
+        let why = format!("{}: {}", case["name"], case["why"]);
+        let bogon = case["bogon"].as_str();
+        let ip = bogon
+            .or_else(|| case["body"]["ip"].as_str())
+            .expect("every case names an address")
+            .to_owned();
+        let mut body = case["body"].clone();
+        if let Some(object) = body.as_object_mut() {
+            object.remove("ip");
+        }
+        let api = if body.is_object() {
+            Api::serving(body, StatusCode::OK).await
+        } else {
+            Api::ok(json!({})).await
+        };
+
+        let warnings = Arc::new(Mutex::new(Vec::new()));
+        let sink = Arc::clone(&warnings);
+        let app = app(guard(
+            api.options()
+                .block_condition(from_json(&case["condition"]).expect("a readable condition"))
+                .ip_selector({
+                    let ip = ip.clone();
+                    Arc::new(move |_: &internetdata::middleware::RequestView<'_>| Some(ip.clone()))
+                })
+                .on_warn(Arc::new(move |m: &str| sink.lock().unwrap().push(m.to_owned()))),
+        ));
+
+        let (status, _) = call(app, "/x", None, &[]).await;
+
+        let blocked = case["expect"]["blocked"].as_bool().expect("blocked");
+        assert_eq!(status, if blocked { StatusCode::FORBIDDEN } else { StatusCode::OK }, "{why}");
+
+        let missing = case["expect"]["missing"].as_array().expect("missing");
+        let reported: Vec<String> = warnings
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|w| w.contains("does not include"))
+            .cloned()
+            .collect();
+        assert_eq!(reported.len(), usize::from(!missing.is_empty()), "{why}");
+        for member in missing {
+            assert!(reported[0].contains(member.as_str().expect("a member")), "{why}");
+        }
+    }
+}

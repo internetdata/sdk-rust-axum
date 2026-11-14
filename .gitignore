@@ -1,0 +1,6 @@
+# Cargo build output.
+/target/
+
+# A published library does not commit a lockfile: consumers resolve their own,
+# and a committed one only ever goes stale.
+/Cargo.lock
