@@ -1,6 +1,6 @@
 [package]
 name = "internetdata-axum"
-version = "1.0.1"
+version = "1.0.2"
 edition = "2024"
 rust-version = "1.85"
 description = "The official axum and tower middleware for the InternetData API: look up the visitor behind each request, where they are, which network they come from and whether it is a VPN, a proxy or a hosting server, and optionally refuse them."

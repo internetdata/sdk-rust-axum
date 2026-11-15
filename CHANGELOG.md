@@ -2,6 +2,12 @@
 
 What each release changed for you, newest first. Each line is a commit's summary, linked to its full description and diff.
 
+## 1.0.2 - 2026-11-15
+
+### Features
+
+- Require internetdata 2.11.0: hosted_domains lists its 10 most popular domains ([`c3f02a7`](https://github.com/internetdata/sdk-rust-axum/commit/c3f02a7e7c223a196791bf477acf4f60ef986384))
+
 ## 1.0.1 - 2026-11-14
 
 ### Fixes
