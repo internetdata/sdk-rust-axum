@@ -2,6 +2,12 @@
 
 What each release changed for you, newest first. Each line is a commit's summary, linked to its full description and diff.
 
+## 2.0.0 - 2026-11-16
+
+### Breaking changes
+
+- Require internetdata 3.0.0: a vocabulary value it was not built with comes back as served ([`3026fb9`](https://github.com/internetdata/sdk-rust-axum/commit/3026fb99f18138d937cb95c33a8ec33f69f940e1))
+
 ## 1.0.3 - 2026-11-16
 
 ### Features
