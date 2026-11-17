@@ -2,6 +2,12 @@
 
 What each release changed for you, newest first. Each line is a commit's summary, linked to its full description and diff.
 
+## 2.0.1 - 2026-11-17
+
+### Features
+
+- Require internetdata 3.1.0: cap_reached on a paid answer past its overage cap ([`5f010c0`](https://github.com/internetdata/sdk-rust-axum/commit/5f010c0488add256cd5f74fbd3abcba9c60af297))
+
 ## 2.0.0 - 2026-11-16
 
 ### Breaking changes
