@@ -18,7 +18,7 @@ exclude = ["/.github"]
 axum = { version = "0.8", default-features = false, features = ["tokio"] }
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 http = "1"
-internetdata = "3.1.0"
+internetdata = "3.1.1"
 tower-layer = "0.3"
 tower-service = "0.3"
 
