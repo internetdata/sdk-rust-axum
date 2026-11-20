@@ -2,6 +2,12 @@
 
 What each release changed for you, newest first. Each line is a commit's summary, linked to its full description and diff.
 
+## 2.0.3 - 2026-11-20
+
+### Fixes
+
+- Require internetdata 3.1.2: a reduced answer is cached a minute at most ([`bb2f90e`](https://github.com/internetdata/sdk-rust-axum/commit/bb2f90e611076f899aa7222ef5057417fa681f57))
+
 ## 2.0.2 - 2026-11-18
 
 ### Fixes
