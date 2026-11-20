@@ -2,6 +2,12 @@
 
 What each release changed for you, newest first. Each line is a commit's summary, linked to its full description and diff.
 
+## 2.0.4 - 2026-11-20
+
+### Fixes
+
+- Require internetdata 3.2.0: a paid domain answer's hosting, co-hosted domains, home page, redirects and backlinks ([`867183a`](https://github.com/internetdata/sdk-rust-axum/commit/867183aceebe3bf225984b73f3ede9897239d920))
+
 ## 2.0.3 - 2026-11-20
 
 ### Fixes
