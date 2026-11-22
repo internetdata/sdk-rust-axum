@@ -2,6 +2,12 @@
 
 What each release changed for you, newest first. Each line is a commit's summary, linked to its full description and diff.
 
+## 2.0.5 - 2026-11-22
+
+### Features
+
+- Require internetdata 3.3.0: is_bot on every answer, and a paid answer's bot ([`98aaecd`](https://github.com/internetdata/sdk-rust-axum/commit/98aaecd110ac119e65dd5b9da91488def807f7f9))
+
 ## 2.0.4 - 2026-11-20
 
 ### Fixes
