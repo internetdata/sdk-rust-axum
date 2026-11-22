@@ -49,6 +49,9 @@ fn blocking() -> Result<(), Box<dyn std::error::Error>> {
     // traffic from servers, not people
     vec![Condition::from([("is_hosting", true)]), Condition::from([("is_cdn", true)])];
 
+    // crawlers and other bots, on every plan
+    Condition::from([("is_bot", true)]);
+
     // anonymity
     vec![
         Condition::from([("is_vpn", true)]),

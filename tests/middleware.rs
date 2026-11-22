@@ -412,6 +412,27 @@ async fn the_readme_key_reaches_the_api_for_a_public_peer() {
     }
 }
 
+/// The README's build from a PUBLIC peer, blocking on `is_bot`, which every
+/// plan answers: a bot's address is refused before the handler runs and any
+/// other reaches it, the key reaching the API each time.
+#[tokio::test]
+async fn an_is_bot_condition_blocks_a_bots_public_address() {
+    const BOT_IP: &str = "66.249.66.1";
+    for (is_bot, want) in [(true, StatusCode::FORBIDDEN), (false, StatusCode::OK)] {
+        let api = Api::ok(json!({ "is_bot": is_bot })).await;
+        let options = Options::new()
+            .api_key(readme_key(Some("key")).unwrap_or_default())
+            .block_condition(vec![Condition::from([("is_bot", true)])]);
+        let app = app(guard(options.base_url(&api.base_url)));
+
+        let (status, _) = call(app, "/x", Some(BOT_IP), &[]).await;
+
+        assert_eq!(status, want, "is_bot {is_bot}");
+        assert_eq!(api.asked(), vec![BOT_IP], "the public peer must be looked up");
+        assert_eq!(api.authorizations(), vec![Some("Bearer key".to_owned())]);
+    }
+}
+
 #[tokio::test]
 async fn corpus_conditions() {
     let corpus = corpus();

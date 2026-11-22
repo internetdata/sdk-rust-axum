@@ -81,6 +81,9 @@ vec![Condition::from([("is_anycast", true)]), Condition::from([("is_satellite", 
 // traffic from servers, not people
 vec![Condition::from([("is_hosting", true)]), Condition::from([("is_cdn", true)])];
 
+// crawlers and other bots, on every plan
+Condition::from([("is_bot", true)]);
+
 // anonymity
 vec![
     Condition::from([("is_vpn", true)]),
