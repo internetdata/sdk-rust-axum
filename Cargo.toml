@@ -19,7 +19,7 @@ axum = { version = "0.8", default-features = false, features = ["tokio"] }
 # 0.3.2 is past RUSTSEC-2020-0062; 0.3.31 is the lowest the base resolves.
 futures-util = { version = "0.3.31", default-features = false, features = ["std"] }
 http = "1"
-internetdata = "3.3.1"
+internetdata = "3.3.2"
 tower-layer = "0.3"
 tower-service = "0.3"
 
