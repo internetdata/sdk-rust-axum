@@ -2,6 +2,13 @@
 
 What each release changed for you, newest first. Each line is a commit's summary, linked to its full description and diff.
 
+## 2.0.7 - 2026-11-23
+
+### Fixes
+
+- Require futures-util 0.3.31, past RUSTSEC-2020-0062 ([`3821baf`](https://github.com/internetdata/sdk-rust-axum/commit/3821bafec2695640b56803f7fb3a556b7479a01d))
+- Require internetdata 3.3.2: futures-util 0.3.31, past RUSTSEC-2020-0062 ([`0f684c0`](https://github.com/internetdata/sdk-rust-axum/commit/0f684c0a0482d5a726f8f65f415006e7db6ea6a2))
+
 ## 2.0.6 - 2026-11-23
 
 ### Fixes
