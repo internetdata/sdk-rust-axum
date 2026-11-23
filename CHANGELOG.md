@@ -2,6 +2,12 @@
 
 What each release changed for you, newest first. Each line is a commit's summary, linked to its full description and diff.
 
+## 2.0.6 - 2026-11-23
+
+### Fixes
+
+- Require internetdata 3.3.1, on spec 2026.11.22 ([`2409816`](https://github.com/internetdata/sdk-rust-axum/commit/240981660061be9ce216903f9a7d7b8608d40790))
+
 ## 2.0.5 - 2026-11-22
 
 ### Features
