@@ -100,7 +100,7 @@ Condition::new()
 Condition::from([("resproxy", Condition::from([("hits", Bound::gte(5.0))]))]);
 ```
 
-Values are matched by equality, strings without regard to case. A `Vec` means any-of. `Bound::gte`, `gt`, `lte` and `lt` compare numbers and chain into a range (`Bound::gte(5.0).and_lt(100.0)`); every bound you give must hold. Members set to `false` or `Value::Null` are ignored, so a condition states the signals you act on; one that constrains nothing would match every request, and is refused when the middleware is built rather than silently blocking all your traffic.
+Values are matched by equality, strings without regard to case. A `Vec` means any-of. A member the answer holds as a list (`web`'s rows, `pubproxy.protocols`) matches when any one element does, an object term against a single row. `Bound::gte`, `gt`, `lte` and `lt` compare numbers and chain into a range (`Bound::gte(5.0).and_lt(100.0)`); every bound you give must hold. Members set to `false` or `Value::Null` are ignored, so a condition states the signals you act on; one that constrains nothing would match every request, and is refused when the middleware is built rather than silently blocking all your traffic.
 
 A policy that lives in your app's config rather than in its source is read with `from_json`, which takes the same shape:
 
