@@ -2,6 +2,12 @@
 
 What each release changed for you, newest first. Each line is a commit's summary, linked to its full description and diff.
 
+## 2.0.8 - 2026-11-24
+
+### Features
+
+- Require internetdata 3.4.0: a condition on a list member matches any element ([`4ed46e2`](https://github.com/internetdata/sdk-rust-axum/commit/4ed46e259c42bdcd60c19c0e2dea0def085a3b3b))
+
 ## 2.0.7 - 2026-11-23
 
 ### Fixes
