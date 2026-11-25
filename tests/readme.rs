@@ -71,6 +71,12 @@ fn blocking() -> Result<(), Box<dyn std::error::Error>> {
         "location": { "country": ["CU", "IR", "KP"] },
     }))?;
 
+    Options::new()
+        .api_key(std::env::var("INTERNETDATA_API_KEY")?)
+        .allow_bots(true)
+        .block_condition(vec![Condition::from([("is_hosting", true)])]);
+    Condition::from([("user_agent", Condition::from([("verdict", "spoofed")]))]);
+
     InternetData::new(Options::new())?.on_blocked(|_parts, _found| {
         (axum::http::StatusCode::UNAVAILABLE_FOR_LEGAL_REASONS, "Not available in your country")
             .into_response()
