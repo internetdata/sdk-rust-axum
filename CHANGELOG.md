@@ -2,6 +2,12 @@
 
 What each release changed for you, newest first. Each line is a commit's summary, linked to its full description and diff.
 
+## 2.0.9 - 2026-11-25
+
+### Features
+
+- Require internetdata 3.5.0: allow_bots lets a verified crawler through ([`080e248`](https://github.com/internetdata/sdk-rust-axum/commit/080e24814808c8523b1904bc20b67247384f2330))
+
 ## 2.0.8 - 2026-11-24
 
 ### Features
