@@ -2,6 +2,12 @@
 
 What each release changed for you, newest first. Each line is a commit's summary, linked to its full description and diff.
 
+## 2.0.10 - 2026-11-26
+
+### Features
+
+- Require internetdata 3.6.0: a keyless lookup is read again ([`50fd758`](https://github.com/internetdata/sdk-rust-axum/commit/50fd758800927cafce3deae0e08abd8cf05dafa3))
+
 ## 2.0.9 - 2026-11-25
 
 ### Features
