@@ -43,13 +43,13 @@ fn blocking() -> Result<(), Box<dyn std::error::Error>> {
     // the network's type
     Condition::from([("asn", Condition::from([("type", "hosting")]))]);
 
-    // anycast and satellite space: a list is OR
-    vec![Condition::from([("is_anycast", true)]), Condition::from([("is_satellite", true)])];
+    // anycast space or a Tor exit: a list is OR
+    vec![Condition::from([("is_anycast", true)]), Condition::from([("is_tor", true)])];
 
     // traffic from servers, not people
     vec![Condition::from([("is_hosting", true)]), Condition::from([("is_cdn", true)])];
 
-    // crawlers and other bots, on every plan
+    // crawlers and other bots, on a paid plan or the trial
     Condition::from([("is_bot", true)]);
 
     // anonymity

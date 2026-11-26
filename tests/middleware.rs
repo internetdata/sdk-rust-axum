@@ -412,8 +412,8 @@ async fn the_readme_key_reaches_the_api_for_a_public_peer() {
     }
 }
 
-/// The README's build from a PUBLIC peer, blocking on `is_bot`, which every
-/// plan answers: a bot's address is refused before the handler runs and any
+/// The README's build from a PUBLIC peer, blocking on `is_bot`, which a paid
+/// answer serves: a bot's address is refused before the handler runs and any
 /// other reaches it, the key reaching the API each time.
 #[tokio::test]
 async fn an_is_bot_condition_blocks_a_bots_public_address() {
