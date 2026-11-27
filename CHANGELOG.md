@@ -2,6 +2,12 @@
 
 What each release changed for you, newest first. Each line is a commit's summary, linked to its full description and diff.
 
+## 2.0.11 - 2026-11-27
+
+### Features
+
+- Require internetdata 3.7.0: a keyless lookup is read without the network's type ([`76dee46`](https://github.com/internetdata/sdk-rust-axum/commit/76dee46a5b58174a93c20b995b8ed34eb16d63a7))
+
 ## 2.0.10 - 2026-11-26
 
 ### Features
