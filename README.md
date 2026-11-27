@@ -18,7 +18,7 @@ cargo add internetdata-axum internetdata
 
 Requires Rust 1.85 or newer, and axum 0.8.
 
-Without an API key a lookup is on Unlimited, the free plan: the country, the network and the company behind the address, Tor, relay and anycast, with no daily or monthly cap. Every lookup your app makes comes from your server's one address, though, so a busy site will see bursts refused. A paid plan answers every field, VPN, the proxy flags, hosting, CDN, bots, carrier and satellite space, the service flags and the city among them; create a key in the [console](https://app.internetdata.io). A free account tries every field.
+Without an API key a lookup is on Unlimited, the free plan: the country, the network and the company behind the address, Tor, relay and anycast, with no daily or monthly cap. Every lookup your app makes comes from your server's one address, though, so a busy site will see bursts refused. A paid plan answers every field, VPN, the proxy flags, hosting, CDN, bots, carrier and satellite space, the service flags, the network's type and the city among them; create a key in the [console](https://app.internetdata.io). A free account tries every field.
 
 ```rust
 use axum::{Router, routing::get};
@@ -67,16 +67,16 @@ Options::new().block_condition(vec![Condition::from([(
 )])]);
 ```
 
-A condition is written in the shape of a result, keyed by the same names the API uses, and only the members you name are considered, so it can refuse on anything in the answer. The country works on every plan, and so do the first two of these:
+A condition is written in the shape of a result, keyed by the same names the API uses, and only the members you name are considered, so it can refuse on anything in the answer. The country works on every plan, and so does the first of these:
 
 ```rust
 use internetdata::middleware::{Bound, Condition};
 
-// the network's type
-Condition::from([("asn", Condition::from([("type", "hosting")]))]);
-
 // anycast space or a Tor exit: a list is OR
 vec![Condition::from([("is_anycast", true)]), Condition::from([("is_tor", true)])];
+
+// the network's type, on a paid plan or the trial
+Condition::from([("asn", Condition::from([("type", "hosting")]))]);
 
 // traffic from servers, not people
 vec![Condition::from([("is_hosting", true)]), Condition::from([("is_cdn", true)])];
@@ -207,7 +207,7 @@ Beyond a few million distinct visitors a day, stop calling the API per request: 
 
 ## Absent is not false
 
-Unlimited, with a key or without one, leaves out `is_vpn`, `is_hosting`, `is_cdn`, the four proxy flags, `is_bot` and the carrier, satellite and service flags, the detail behind them, and the paid members inside `location`, `asn`, `company` and `abuse`, such as `location.city`. A field your plan does not include is `None`, which means "not in your plan" rather than "checked, and no". The exception is `is_bot`, `is_carrier`, `is_satellite`, `is_ssh`, `is_smtp`, `is_web`, `is_dns_resolver` and `is_bittorrent`, which stay `bool` and read `false` there until the next major of `internetdata`; a `block_condition` on one still reports the gap.
+Unlimited, with a key or without one, leaves out `is_vpn`, `is_hosting`, `is_cdn`, the four proxy flags, `is_bot` and the carrier, satellite and service flags, the detail behind them, and the paid members inside `location`, `asn`, `company` and `abuse`, such as `location.city`. A field your plan does not include is `None`, which means "not in your plan" rather than "checked, and no". The exception is `is_bot`, `is_carrier`, `is_satellite`, `is_ssh`, `is_smtp`, `is_web`, `is_dns_resolver` and `is_bittorrent`, which stay `bool` and read `false` there, and `asn.type`, which stays a `String` and reads empty, until the next major of `internetdata`; a `block_condition` on one still reports the gap.
 
 ```rust
 # fn f(result: &internetdata::Lookup) -> bool {
@@ -215,7 +215,7 @@ result.is_vpn.unwrap_or(false)   // when you only want the flag
 # }
 ```
 
-A `block_condition` naming a member your plan does not serve, `location.city` or `is_bot` on Unlimited included, can never match, so the middleware warns once instead of failing silently. Set `on_missing_field(OnMissingField::Fail)` to make it an error.
+A `block_condition` naming a member your plan does not serve, `location.city`, `asn.type` or `is_bot` on Unlimited included, can never match, so the middleware warns once instead of failing silently. Set `on_missing_field(OnMissingField::Fail)` to make it an error.
 
 ## Other Libraries
 

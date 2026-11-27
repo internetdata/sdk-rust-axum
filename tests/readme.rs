@@ -40,11 +40,11 @@ fn blocking() -> Result<(), Box<dyn std::error::Error>> {
         Condition::from([("country", vec!["CU", "IR", "KP"])]),
     )])]);
 
-    // the network's type
-    Condition::from([("asn", Condition::from([("type", "hosting")]))]);
-
     // anycast space or a Tor exit: a list is OR
     vec![Condition::from([("is_anycast", true)]), Condition::from([("is_tor", true)])];
+
+    // the network's type, on a paid plan or the trial
+    Condition::from([("asn", Condition::from([("type", "hosting")]))]);
 
     // traffic from servers, not people
     vec![Condition::from([("is_hosting", true)]), Condition::from([("is_cdn", true)])];
