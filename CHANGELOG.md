@@ -2,6 +2,12 @@
 
 What each release changed for you, newest first. Each line is a commit's summary, linked to its full description and diff.
 
+## 2.0.12 - 2026-11-28
+
+### Features
+
+- Require internetdata 3.8.0: allow_bots sends only a crawler's User-Agent, at most four an address ([`12a036f`](https://github.com/internetdata/sdk-rust-axum/commit/12a036f6c394a5acab8bd40ae32f51b40b774cfc))
+
 ## 2.0.11 - 2026-11-27
 
 ### Features
